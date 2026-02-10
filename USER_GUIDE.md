@@ -1,4 +1,4 @@
-# GitHub Docs MCP Server - User Guide
+# JDocMunch MCP Server - User Guide
 
 **Your complete guide to querying GitHub documentation with 97% token efficiency.**
 
@@ -21,9 +21,9 @@
 
 ## Introduction
 
-### What is GitHub Docs MCP?
+### What is JDocMunch MCP?
 
-GitHub Docs MCP is an intelligent documentation server that allows AI agents (like Claude) to access GitHub repository documentation efficiently. Instead of loading entire documentation files (costing thousands of tokens), it intelligently indexes, summarizes, and delivers only the sections you need.
+JDocMunch MCP is an intelligent documentation server that allows AI agents (like Claude) to access GitHub repository documentation efficiently. Instead of loading entire documentation files (costing thousands of tokens), it intelligently indexes, summarizes, and delivers only the sections you need.
 
 ### Why Use It?
 
@@ -31,7 +31,7 @@ GitHub Docs MCP is an intelligent documentation server that allows AI agents (li
 When AI agents need to answer questions about a codebase's documentation, the naive approach is to load all documentation files into context. For a typical project, this can cost 50,000+ tokens per query—expensive and slow.
 
 **The Solution:**
-GitHub Docs MCP pre-processes documentation into a searchable index with AI-generated summaries. It loads only relevant sections on demand, reducing token usage by ~97%.
+JDocMunch MCP pre-processes documentation into a searchable index with AI-generated summaries. It loads only relevant sections on demand, reducing token usage by ~97%.
 
 **Real-World Impact:**
 - **Cost Savings**: $0.03 per query instead of $0.75
@@ -65,8 +65,8 @@ Before you begin, ensure you have:
 
 ```bash
 # Clone the repository
-git clone https://github.com/jgravelle/github-docs-mcp.git
-cd github-docs-mcp
+git clone https://github.com/jgravelle/jdocmunch-mcp.git
+cd jdocmunch-mcp
 
 # Install in development mode
 pip install -e .
@@ -76,8 +76,8 @@ pip install -e .
 
 ```bash
 # Run directly from source
-cd github-docs-mcp
-python -m src.github_docs_mcp.server
+cd jdocmunch-mcp
+python -m src.jdocmunch_mcp.server
 ```
 
 ### Configuration
@@ -115,7 +115,7 @@ Add the server to your Claude Code MCP configuration at `~/.claude/mcp.json`:
 {
   "mcpServers": {
     "github-docs": {
-      "command": "github-docs-mcp"
+      "command": "jdocmunch-mcp"
     }
   }
 }
@@ -127,8 +127,8 @@ Add the server to your Claude Code MCP configuration at `~/.claude/mcp.json`:
   "mcpServers": {
     "github-docs": {
       "command": "python",
-      "args": ["-m", "github_docs_mcp.server"],
-      "cwd": "/absolute/path/to/github-docs-mcp/src"
+      "args": ["-m", "jdocmunch_mcp.server"],
+      "cwd": "/absolute/path/to/jdocmunch-mcp/src"
     }
   }
 }
@@ -184,7 +184,7 @@ When answering questions:
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  GitHub Docs MCP Server                                     │
+│  JDocMunch MCP Server                                       │
 │  • Maintains local index cache                              │
 │  • Provides lazy-loading tools                              │
 │  • Returns only requested data                              │
@@ -1034,7 +1034,7 @@ get_section({repo: "your-repo", section_id: "parent-section"})
 export MCP_DEBUG=1
 
 # Run the server
-python -m github_docs_mcp.server
+python -m jdocmunch_mcp.server
 ```
 
 #### Check Index Files
@@ -1051,7 +1051,7 @@ ls -la ~/.doc-index/owner-repo/
 
 ```python
 # Test in Python REPL
-from github_docs_mcp.tools.search_sections import search_sections
+from jdocmunch_mcp.tools.search_sections import search_sections
 
 result = search_sections(repo="claude-code", query="test", max_results=5)
 print(result)
@@ -1073,7 +1073,7 @@ The server works with any MCP-compatible client:
   "servers": {
     "github-docs": {
       "transport": "stdio",
-      "command": "github-docs-mcp"
+      "command": "jdocmunch-mcp"
     }
   }
 }
@@ -1083,8 +1083,8 @@ The server works with any MCP-compatible client:
 
 ```python
 # Direct Python usage (without MCP)
-from github_docs_mcp.tools.index_repo import index_repo
-from github_docs_mcp.tools.search_sections import search_sections
+from jdocmunch_mcp.tools.index_repo import index_repo
+from jdocmunch_mcp.tools.search_sections import search_sections
 
 # Index a repository
 await index_repo(url="owner/repo", use_ai_summaries=True)
@@ -1101,7 +1101,7 @@ print(results)
 ```python
 # Index multiple repositories concurrently
 import asyncio
-from github_docs_mcp.tools.index_repo import index_repo
+from jdocmunch_mcp.tools.index_repo import index_repo
 
 async def index_multiple(repos):
     tasks = [index_repo(url=repo, use_ai_summaries=True) for repo in repos]
@@ -1116,7 +1116,7 @@ await index_multiple(repos)
 
 ```python
 # Modify summarizer to use different models
-# Edit: src/github_docs_mcp/summarizer/batch_summarize.py
+# Edit: src/jdocmunch_mcp/summarizer/batch_summarize.py
 
 # Change model from claude-haiku to claude-sonnet for better summaries
 client = anthropic.Anthropic(api_key=api_key)
@@ -1134,7 +1134,7 @@ response = client.messages.create(
 ```python
 # Currently, only README.md and docs/ are indexed
 # To index custom paths, modify:
-# src/github_docs_mcp/tools/index_repo.py
+# src/jdocmunch_mcp/tools/index_repo.py
 
 # Example: Add "wiki/" to indexed paths
 paths_to_index = [
@@ -1148,7 +1148,7 @@ paths_to_index = [
 
 ```python
 # Modify search algorithm
-# Edit: src/github_docs_mcp/tools/search_sections.py
+# Edit: src/jdocmunch_mcp/tools/search_sections.py
 
 def search_sections(repo, query, max_results=10):
     # Add custom ranking logic
@@ -1450,7 +1450,7 @@ Not parsed as separate sections: footnotes, HTML, embedded components.
 
 **Q: How do I contribute to the project?**
 
-A: The project is open source! Visit [github.com/jgravelle/github-docs-mcp](https://github.com/jgravelle/github-docs-mcp) to:
+A: The project is open source! Visit [github.com/jgravelle/jdocmunch-mcp](https://github.com/jgravelle/jdocmunch-mcp) to:
 - Report issues
 - Submit pull requests
 - Request features
@@ -1513,7 +1513,7 @@ For more granular control, future versions may support subdirectory indexing.
 
 ### Support Channels
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/jgravelle/github-docs-mcp/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/jgravelle/jdocmunch-mcp/issues)
 - **Discussions**: Share use cases and ask questions
 - **Documentation**: This guide and the README
 
@@ -1619,4 +1619,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-*Need more help? Open an issue on [GitHub](https://github.com/jgravelle/github-docs-mcp/issues)!*
+*Need more help? Open an issue on [GitHub](https://github.com/jgravelle/jdocmunch-mcp/issues)!*

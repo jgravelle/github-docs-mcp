@@ -1,14 +1,14 @@
-"""Test script for github-docs-mcp server."""
+"""Test script for jdocmunch-mcp server."""
 
 import asyncio
 import json
 import sys
 sys.path.insert(0, "src")
 
-from github_docs_mcp.parser.markdown import parse_markdown_to_sections
-from github_docs_mcp.storage.index_store import IndexStore
-from github_docs_mcp.tools.list_repos import list_repos
-from github_docs_mcp.tools.index_repo import index_repo
+from jdocmunch_mcp.parser.markdown import parse_markdown_to_sections
+from jdocmunch_mcp.storage.index_store import IndexStore
+from jdocmunch_mcp.tools.list_repos import list_repos
+from jdocmunch_mcp.tools.index_repo import index_repo
 
 
 def test_markdown_parser():
@@ -70,7 +70,7 @@ def test_storage():
     """Test storage functionality."""
     print("Testing storage...")
 
-    from github_docs_mcp.parser.markdown import Section
+    from jdocmunch_mcp.parser.markdown import Section
 
     store = IndexStore("./test_storage")
 
@@ -157,7 +157,7 @@ def test_list_repos():
 
 def main():
     print("\n" + "=" * 50)
-    print("GitHub Docs MCP Server - Test Suite")
+    print("JDocMunch MCP Server - Test Suite")
     print("=" * 50 + "\n")
 
     test_markdown_parser()

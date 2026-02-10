@@ -1,8 +1,8 @@
-# GitHub Docs MCP Server
+# JDocMunch MCP Server
 
 **Query any GitHub repository's documentation with 97% fewer tokens.** 🚀
 
-Stop paying for full documentation loads. The GitHub Docs MCP Server intelligently indexes, summarizes, and delivers only the documentation you need—saving you massive amounts on API costs while getting Claude faster access to precisely relevant information.
+Stop paying for full documentation loads. The JDocMunch MCP Server intelligently indexes, summarizes, and delivers only the documentation you need—saving you massive amounts on API costs while getting Claude faster access to precisely relevant information.
 
 ## Why You Need This
 
@@ -23,7 +23,7 @@ Instead of dumping entire documentation into Claude's context (costing thousands
 ## Quick Start
 
 ```bash
-cd github-docs-mcp
+cd jdocmunch-mcp
 pip install -e .
 ```
 
@@ -47,7 +47,7 @@ Add to your `.claude/mcp.json`:
 {
   "mcpServers": {
     "github-docs": {
-      "command": "github-docs-mcp"
+      "command": "jdocmunch-mcp"
     }
   }
 }
@@ -60,8 +60,8 @@ Or if running locally:
   "mcpServers": {
     "github-docs": {
       "command": "python",
-      "args": ["-m", "github_docs_mcp.server"],
-      "cwd": "/path/to/github-docs-mcp"
+      "args": ["-m", "jdocmunch_mcp.server"],
+      "cwd": "/path/to/jdocmunch-mcp"
     }
   }
 }
@@ -92,7 +92,7 @@ Load entire anthropics/claude-code docs → ~50,000 tokens
 Answer one question → Cost scales with repo size
 ```
 
-### The GitHub Docs MCP Way
+### The JDocMunch MCP Way
 ```
 User: "How do I set up OAuth in anthropics/claude-code?"
 
@@ -107,7 +107,7 @@ Total: ~1,800 tokens
 
 **Cost Comparison:**
 - Naive approach: 50,000 tokens (~$0.75)
-- GitHub Docs MCP: 1,800 tokens (~$0.03)
+- JDocMunch MCP: 1,800 tokens (~$0.03)
 - **Savings: 96% ✓**
 
 Scale this across hundreds of queries and you'll save thousands of dollars.
@@ -146,7 +146,7 @@ No expensive API calls after the initial index—everything is local.
                     Uses MCP Tools
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
-│  GitHub Docs MCP Server                                     │
+│  JDocMunch MCP Server                                       │
 │                                                             │
 │  Smart Tools:                                               │
 │  • index_repo() → Fetch & parse docs once                  │

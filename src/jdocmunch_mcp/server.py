@@ -16,7 +16,7 @@ from .tools.search_sections import search_sections as do_search_sections
 
 
 # Create MCP server
-server = Server("github-docs-mcp")
+server = Server("jdocmunch-mcp")
 
 
 @server.list_tools()

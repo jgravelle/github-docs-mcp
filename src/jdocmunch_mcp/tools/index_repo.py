@@ -41,7 +41,7 @@ async def fetch_github_contents(
     """Fetch contents of a directory from GitHub API."""
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "github-docs-mcp",
+        "User-Agent": "jdocmunch-mcp",
     }
     if token:
         headers["Authorization"] = f"token {token}"
@@ -65,7 +65,7 @@ async def fetch_file_content(
     """Fetch raw content of a file from GitHub."""
     headers = {
         "Accept": "application/vnd.github.v3.raw",
-        "User-Agent": "github-docs-mcp",
+        "User-Agent": "jdocmunch-mcp",
     }
     if token:
         headers["Authorization"] = f"token {token}"
