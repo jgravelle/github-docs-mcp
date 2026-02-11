@@ -3,8 +3,6 @@
 import re
 import os
 from typing import Optional
-from urllib.parse import urlparse
-
 import httpx
 
 from ..parser.markdown import parse_markdown_to_sections, Section
@@ -30,30 +28,6 @@ def parse_github_url(url: str) -> tuple[str, str]:
             return owner, repo
 
     raise ValueError(f"Could not parse GitHub URL: {url}")
-
-
-async def fetch_github_contents(
-    owner: str,
-    repo: str,
-    path: str = "",
-    token: Optional[str] = None,
-) -> list[dict]:
-    """Fetch contents of a directory from GitHub API."""
-    headers = {
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "jdocmunch-mcp",
-    }
-    if token:
-        headers["Authorization"] = f"token {token}"
-
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code == 404:
-            return []
-        response.raise_for_status()
-        return response.json()
 
 
 async def fetch_file_content(
@@ -83,50 +57,33 @@ async def discover_doc_files(
     repo: str,
     token: Optional[str] = None,
 ) -> list[str]:
-    """Discover documentation files in a repository."""
-    doc_files: list[str] = []
+    """Discover all markdown files in the entire repository using the Git Trees API."""
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "jdocmunch-mcp",
+    }
+    if token:
+        headers["Authorization"] = f"token {token}"
 
-    # Check for README
-    root_contents = await fetch_github_contents(owner, repo, "", token)
-    for item in root_contents:
-        name_lower = item["name"].lower()
-        if name_lower.startswith("readme") and name_lower.endswith(".md"):
-            doc_files.append(item["name"])
-
-    # Check common documentation directories
-    doc_dirs = ["docs", "doc", "documentation"]
-    for doc_dir in doc_dirs:
-        dir_contents = await fetch_github_contents(owner, repo, doc_dir, token)
-        await _collect_doc_files(owner, repo, doc_dir, dir_contents, doc_files, token)
-
-    return doc_files
-
-
-async def _collect_doc_files(
-    owner: str,
-    repo: str,
-    base_path: str,
-    contents: list[dict],
-    doc_files: list[str],
-    token: Optional[str] = None,
-    max_depth: int = 3,
-) -> None:
-    """Recursively collect documentation files from a directory."""
-    if max_depth <= 0:
-        return
-
-    # Supported doc extensions
     doc_extensions = (".md", ".markdown")
 
-    for item in contents:
-        if item["type"] == "file" and item["name"].lower().endswith(doc_extensions):
-            doc_files.append(f"{base_path}/{item['name']}")
-        elif item["type"] == "dir":
-            sub_path = f"{base_path}/{item['name']}"
-            sub_contents = await fetch_github_contents(owner, repo, sub_path, token)
-            await _collect_doc_files(
-                owner, repo, sub_path, sub_contents, doc_files, token, max_depth - 1
-            )
+    # Use the Git Trees API with recursive flag to get the full file tree in one call
+    url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/HEAD?recursive=1"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        if response.status_code == 404:
+            return []
+        response.raise_for_status()
+        data = response.json()
+
+    doc_files: list[str] = []
+    for item in data.get("tree", []):
+        if item["type"] == "blob" and item["path"].lower().endswith(doc_extensions):
+            doc_files.append(item["path"])
+
+    doc_files.sort()
+    return doc_files
 
 
 async def index_repo(

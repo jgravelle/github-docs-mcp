@@ -1,7 +1,6 @@
 """AI-powered batch summarization of sections."""
 
 import os
-import json
 from typing import Optional
 
 from ..parser.markdown import Section
@@ -94,29 +93,6 @@ One-line summary:"""
     def summarize_batch(
         self,
         sections: list[Section],
-        batch_size: int = 10,
-    ) -> list[Section]:
-        """
-        Generate summaries for multiple sections.
-
-        Batches requests to reduce API calls.
-        """
-        # For efficiency, batch multiple sections into single requests
-        result_sections = []
-
-        for i in range(0, len(sections), batch_size):
-            batch = sections[i:i + batch_size]
-            summaries = self._summarize_batch_internal(batch)
-
-            for section, summary in zip(batch, summaries):
-                section.summary = summary
-                result_sections.append(section)
-
-        return result_sections
-
-    def summarize_batch(
-        self,
-        sections: list[Section],
         batch_size: int = 5,
     ) -> list[Section]:
         """
@@ -132,18 +108,6 @@ One-line summary:"""
 
         return result_sections
 
-    def _summarize_batch_internal(self, sections: list[Section]) -> list[str]:
-        """Summarize a batch of sections (individual processing for Ollama)."""
-        return [self.summarize_section(s) for s in sections]
-
-    def _fallback_summary(self, section: Section) -> str:
-        """Generate a simple fallback summary without AI."""
-        # Use first non-header, non-empty line
-        for line in section.content.split('\n'):
-            line = line.strip()
-            if line and not line.startswith('#') and not line.startswith('```'):
-                return line[:100]
-        return section.title
 
 
 def summarize_sections_simple(sections: list[Section]) -> list[Section]:

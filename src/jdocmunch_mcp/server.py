@@ -9,6 +9,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 from .tools.index_repo import index_repo as do_index_repo
+from .tools.index_local import index_local as do_index_local
 from .tools.list_repos import list_repos as do_list_repos
 from .tools.get_toc import get_toc as do_get_toc, get_toc_tree as do_get_toc_tree
 from .tools.get_section import get_section as do_get_section, get_sections as do_get_sections
@@ -27,8 +28,9 @@ async def list_tools() -> list[Tool]:
             name="index_repo",
             description="""Index a GitHub repository's documentation for efficient querying.
 
-This preprocesses the repository's README and docs/ folder into a searchable index
-with section summaries. Run this once per repository before using other tools.
+This searches the entire repository tree for all markdown files (.md, .markdown)
+and preprocesses them into a searchable index with section summaries.
+Run this once per repository before using other tools.
 
 Supports:
 - Public repositories (no token needed)
@@ -48,6 +50,42 @@ Supports:
                     },
                 },
                 "required": ["url"],
+            },
+        ),
+        Tool(
+            name="index_local",
+            description="""Index a local directory's documentation for efficient querying.
+
+This crawls a local directory tree for all markdown files (.md, .markdown)
+and preprocesses them into a searchable index with section summaries.
+Run this once per directory before using other tools.
+
+Automatically skips common non-documentation directories like .git,
+node_modules, __pycache__, venv, dist, build, etc.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to local directory to index",
+                    },
+                    "use_ai_summaries": {
+                        "type": "boolean",
+                        "description": "Use AI to generate section summaries (requires ANTHROPIC_API_KEY or Ollama)",
+                        "default": True,
+                    },
+                    "max_depth": {
+                        "type": "integer",
+                        "description": "Maximum directory depth to crawl (default: 5)",
+                        "default": 5,
+                    },
+                    "include_hidden": {
+                        "type": "boolean",
+                        "description": "Whether to include hidden directories (starting with .)",
+                        "default": False,
+                    },
+                },
+                "required": ["path"],
             },
         ),
         Tool(
@@ -188,6 +226,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             result = await do_index_repo(
                 url=arguments["url"],
                 use_ai_summaries=arguments.get("use_ai_summaries", True),
+            )
+        elif name == "index_local":
+            result = await do_index_local(
+                path=arguments["path"],
+                use_ai_summaries=arguments.get("use_ai_summaries", True),
+                max_depth=arguments.get("max_depth", 5),
+                include_hidden=arguments.get("include_hidden", False),
             )
         elif name == "list_repos":
             result = do_list_repos()

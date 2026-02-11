@@ -9,6 +9,7 @@ from jdocmunch_mcp.parser.markdown import parse_markdown_to_sections
 from jdocmunch_mcp.storage.index_store import IndexStore
 from jdocmunch_mcp.tools.list_repos import list_repos
 from jdocmunch_mcp.tools.index_repo import index_repo
+from jdocmunch_mcp.tools.index_local import index_local, discover_local_doc_files
 
 
 def test_markdown_parser():
@@ -147,6 +148,38 @@ async def test_index_repo():
         print("  (This is OK if GitHub API is rate-limited)\n")
 
 
+def test_discover_local_doc_files():
+    """Test discovering local markdown files."""
+    print("Testing local doc file discovery...")
+
+    files = discover_local_doc_files(".")
+    print(f"  Found {len(files)} markdown files:")
+    for f in files[:5]:  # Show first 5
+        print(f"    - {f}")
+    if len(files) > 5:
+        print(f"    ... and {len(files) - 5} more")
+
+    assert len(files) > 0, "Should find markdown files"
+    print("  [OK] Local doc discovery works!\n")
+
+
+async def test_index_local():
+    """Test indexing a local codebase."""
+    print("Testing local codebase indexing...")
+
+    result = await index_local(
+        path=".",
+        use_ai_summaries=False,  # Skip AI for testing
+    )
+
+    assert result.get("success"), f"Should succeed: {result.get('error')}"
+    print(f"  Indexed: {result['repo']}")
+    print(f"  Path: {result['path']}")
+    print(f"  Files: {result['file_count']}")
+    print(f"  Sections: {result['section_count']}")
+    print("  [OK] Local indexing works!\n")
+
+
 def test_list_repos():
     """Test listing repos."""
     print("Testing list_repos...")
@@ -163,6 +196,13 @@ def main():
     test_markdown_parser()
     test_storage()
     test_list_repos()
+    test_discover_local_doc_files()
+
+    print("Testing local indexing...")
+    try:
+        asyncio.run(test_index_local())
+    except Exception as e:
+        print(f"  Error: {e}\n")
 
     # Optional: test actual GitHub fetch
     print("Testing GitHub API (optional)...")
