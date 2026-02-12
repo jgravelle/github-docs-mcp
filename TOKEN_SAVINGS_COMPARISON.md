@@ -137,3 +137,32 @@ Repo: raspberrypi/linux (rpi-6.12.y/Documentation)
 - **Total Context**: ~1,900 tokens
 
 **Actual Savings: 87%** ✅
+
+---
+
+## Cost Separation: Indexing vs Query
+
+| Phase | Cost | Frequency |
+|-------|------|-----------|
+| **Indexing** | ~0 tokens in your context (runs in MCP server) | Once per repo |
+| **Query: TOC** | ~375-600 tokens | Once per session (cached after) |
+| **Query: Search** | ~200-400 tokens | Per search |
+| **Query: Section** | ~200-1,500 tokens | Per section retrieved |
+
+The indexing cost is **external** to the AI context window — it runs inside the MCP server process and does not consume client tokens. Query costs are what appear in the client context.
+
+---
+
+## How to Reproduce
+
+```bash
+# Run the benchmark harness with standardized datasets
+python benchmarks/run_benchmark.py --generate --dataset medium
+
+# Or reproduce with a real repository:
+# 1. Index: use index_local or index_repo tool
+# 2. Query: use get_toc, search_sections, get_section tools
+# 3. Compare token counts in MCP responses vs raw file sizes
+```
+
+See `benchmarks/README.md` for dataset details and methodology.

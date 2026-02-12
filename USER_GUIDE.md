@@ -607,6 +607,144 @@ search_sections({
 - Combine with `get_section` to load relevant content
 - Limit results with `max_results` to save tokens
 
+### Tool 8: `get_document_outline`
+
+Get the hierarchical outline of a single file.
+
+**Parameters**:
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `repo` | string | Yes | - | Repository identifier |
+| `file_path` | string | Yes | - | Path of the file within the repo |
+
+**Example Response**:
+```json
+{
+  "repo": "owner/repo",
+  "file": "docs/guide.md",
+  "outline": [
+    {
+      "id": "guide-introduction",
+      "title": "Introduction",
+      "depth": 1,
+      "summary": "Overview of the guide",
+      "line_count": 10,
+      "children": [
+        {
+          "id": "guide-prerequisites",
+          "title": "Prerequisites",
+          "depth": 2,
+          "summary": "What you need to get started",
+          "line_count": 5,
+          "children": []
+        }
+      ]
+    }
+  ],
+  "_meta": { "index_version": 1, "indexed_at": "...", "commit_hash": "..." }
+}
+```
+
+### Tool 9: `delete_index`
+
+Delete a repository's cached index and content files.
+
+**Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `repo` | string | Yes | Repository identifier |
+
+**Example Response**:
+```json
+{
+  "success": true,
+  "message": "Index deleted for owner/repo"
+}
+```
+
+### Filtering Parameters (get_toc, search_sections)
+
+Both `get_toc` and `search_sections` support optional filtering:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path_prefix` | string | Only include sections from files starting with this prefix (e.g. `docs/api/`) |
+| `max_depth` | integer | Only include sections with heading depth <= this value |
+| `file_pattern` | string | Glob pattern to filter files (e.g. `docs/*.md`) |
+
+**Example**: Get TOC for only the API docs:
+```json
+{
+  "tool": "get_toc",
+  "arguments": {
+    "repo": "owner/repo",
+    "path_prefix": "docs/api/",
+    "max_depth": 2
+  }
+}
+```
+
+### Response Metadata
+
+All query tools include a `_meta` field in their response:
+
+```json
+{
+  "_meta": {
+    "index_version": 1,
+    "indexed_at": "2025-01-15T10:30:00.000000",
+    "commit_hash": "abc123def456..."
+  }
+}
+```
+
+---
+
+## New Features
+
+### Multi-Format Support
+
+jDocMunch now supports additional documentation formats beyond Markdown:
+
+| Extension | Format | Parser |
+|-----------|--------|--------|
+| `.md`, `.markdown` | Markdown | Built-in (header-based sections) |
+| `.mdx` | MDX | Preprocessor strips JSX/imports, then Markdown parser |
+| `.rst` | reStructuredText | Native RST parser with underline-character depth detection |
+
+### Incremental Reindexing
+
+When re-indexing a previously indexed repository, jDocMunch compares file hashes to determine which files changed. Only changed, new, or deleted files are reprocessed — unchanged files carry forward their existing sections.
+
+### Security Features
+
+- **Symlink protection**: Symlinks are not followed by default. When enabled, targets are validated to stay within the base directory.
+- **Secret detection**: Files containing private keys, AWS access keys, API tokens, etc. are automatically skipped.
+- **Sensitive file filtering**: Known sensitive files (.env, credentials.json, *.pem, etc.) are never indexed.
+- **.gitignore respect**: Local indexing honors `.gitignore` rules.
+
+### Local-Only Mode
+
+Set `JDOCMUNCH_LOCAL_ONLY=true` to prevent all outbound network calls:
+- `index_repo` returns an error
+- AI summarization falls back to keyword-based (no Anthropic API)
+- Ollama (local) is still permitted
+
+### Cache Versioning
+
+Indexes now include a version number, commit hash, and per-file content hashes. When the cache schema changes, old indexes are automatically invalidated (force re-index). See [CACHE_SPEC.md](CACHE_SPEC.md) for details.
+
+### Environment Variables
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `GITHUB_TOKEN` | GitHub API authentication | (none) |
+| `ANTHROPIC_API_KEY` | Anthropic API authentication | (none) |
+| `OLLAMA_URL` | Ollama server URL | `http://localhost:11434/api/generate` |
+| `OLLAMA_MODEL` | Ollama model name | `qwen3:4b` |
+| `USE_OLLAMA` | Enable Ollama summarization | `true` |
+| `JDOCMUNCH_LOCAL_ONLY` | Restrict to local-only operation | `false` |
+
 ---
 
 ## Common Workflows
@@ -1591,19 +1729,25 @@ Steps:
 
 ## Changelog
 
-### Version 1.0.0 (Current)
-- Initial release
-- Core tools: index, list, TOC, sections, search
-- AI-powered summaries
-- Local caching
-- GitHub API integration
+### Version 0.2.0 (Current)
+- **Security**: Symlink/path traversal protection, secret detection, .gitignore respect
+- **Cache**: Versioned indexes with commit hash and file hash tracking
+- **Formats**: MDX and reStructuredText (.rst) support
+- **Tools**: `get_document_outline`, `delete_index` tools added
+- **Filtering**: `path_prefix`, `max_depth`, `file_pattern` params on `get_toc` and `search_sections`
+- **Metadata**: `_meta` envelope on all tool responses (index_version, commit_hash, indexed_at)
+- **Performance**: Byte-offset section retrieval, incremental reindexing
+- **Parsing**: Headingless file heuristics, YAML front-matter extraction, stable section IDs
+- **Mode**: `JDOCMUNCH_LOCAL_ONLY` environment variable
+- **Benchmarks**: Reproducible benchmark harness
+- **Docs**: SECURITY.md, CACHE_SPEC.md, updated USER_GUIDE.md and README.md
 
-### Planned Features
-- Full-text content search
-- Automatic re-indexing on changes
-- Support for other Git platforms
-- Custom path configuration
-- Webhook integration for live updates
+### Version 0.1.0
+- Initial release
+- Core tools: index_repo, index_local, list_repos, get_toc, get_toc_tree, get_section, get_sections, search_sections
+- AI-powered summaries (Anthropic + Ollama)
+- Local caching at ~/.doc-index/
+- GitHub API integration
 
 ---
 
@@ -1613,8 +1757,6 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated**: 2024-01-15
-**Version**: 1.0.0
 **Maintainer**: [jgravelle](https://github.com/jgravelle)
 
 ---

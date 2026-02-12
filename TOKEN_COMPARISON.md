@@ -124,6 +124,42 @@ Assuming Claude API pricing (~$0.01 per 1K tokens):
 
 ---
 
+## Cost Breakdown: Indexing vs Query
+
+It is important to separate **one-time indexing cost** from **per-query cost**:
+
+| Phase | Tokens | Frequency | Notes |
+|-------|--------|-----------|-------|
+| **Indexing** | ~708K | Once per repo | Downloads files, parses sections, generates summaries |
+| **Per-query (cached)** | ~500-600 | Every query | Search + retrieve from local cache, 0 API calls |
+| **Incremental reindex** | Varies | When files change | Only re-parses changed files (hash comparison) |
+
+### Amortization
+
+The indexing cost is paid once and amortized across all queries. After just 2 queries, the MCP approach is cheaper than re-fetching.
+
+---
+
+## How to Reproduce
+
+These benchmarks can be reproduced using the included benchmark harness:
+
+```bash
+# Generate datasets and run benchmarks
+python benchmarks/run_benchmark.py --generate --output results.json
+
+# Or index a real repo and query it
+python -c "
+import asyncio
+from jdocmunch_mcp.tools.index_local import index_local
+asyncio.run(index_local('path/to/repo', use_ai_summaries=False))
+"
+```
+
+See `benchmarks/README.md` for full methodology and dataset descriptions.
+
+---
+
 ## Conclusion
 
 **jdocmunch-mcp provides dramatic token savings:**

@@ -27,7 +27,6 @@ def get_section(
     if "/" in repo:
         owner, name = repo.split("/", 1)
     else:
-        # Try to find by name only
         repos = store.list_repos()
         matching = [r for r in repos if r["repo"].endswith(f"/{repo}")]
         if not matching:
@@ -56,7 +55,14 @@ def get_section(
         "depth": section_meta["depth"],
         "parent": section_meta.get("parent"),
         "line_count": section_meta["line_count"],
+        "byte_offset": section_meta.get("byte_offset", 0),
+        "byte_length": section_meta.get("byte_length", 0),
         "content": content,
+        "_meta": {
+            "index_version": getattr(index, "index_version", 0),
+            "indexed_at": index.indexed_at,
+            "commit_hash": getattr(index, "commit_hash", ""),
+        },
     }
 
 

@@ -1,18 +1,23 @@
 """Tool to index a GitHub repository's documentation."""
 
-import re
+import hashlib
+import logging
 import os
+import re
 from typing import Optional
+
 import httpx
 
 from ..parser.markdown import parse_markdown_to_sections, Section
+from ..security import is_sensitive_filename, scan_content_for_secrets
 from ..storage.index_store import IndexStore
 from ..summarizer.batch_summarize import BatchSummarizer, summarize_sections_simple
+
+logger = logging.getLogger(__name__)
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
     """Extract owner and repo name from GitHub URL."""
-    # Handle various GitHub URL formats
     patterns = [
         r"github\.com/([^/]+)/([^/]+)",  # https://github.com/owner/repo
         r"^([^/]+)/([^/]+)$",  # owner/repo
@@ -23,7 +28,6 @@ def parse_github_url(url: str) -> tuple[str, str]:
         if match:
             owner = match.group(1)
             repo = match.group(2)
-            # Clean up repo name (remove .git suffix)
             repo = repo.replace('.git', '')
             return owner, repo
 
@@ -52,12 +56,12 @@ async def fetch_file_content(
         return response.text
 
 
-async def discover_doc_files(
+async def _fetch_commit_sha(
     owner: str,
     repo: str,
     token: Optional[str] = None,
-) -> list[str]:
-    """Discover all markdown files in the entire repository using the Git Trees API."""
+) -> str:
+    """Fetch the HEAD commit SHA from GitHub API."""
     headers = {
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "jdocmunch-mcp",
@@ -65,25 +69,64 @@ async def discover_doc_files(
     if token:
         headers["Authorization"] = f"token {token}"
 
-    doc_extensions = (".md", ".markdown")
+    url = f"https://api.github.com/repos/{owner}/{repo}/commits/HEAD"
 
-    # Use the Git Trees API with recursive flag to get the full file tree in one call
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("sha", "")
+    except Exception:
+        pass
+    return ""
+
+
+async def discover_doc_files(
+    owner: str,
+    repo: str,
+    token: Optional[str] = None,
+) -> tuple[list[str], dict[str, str]]:
+    """
+    Discover all markdown files in the entire repository using the Git Trees API.
+
+    Returns:
+        Tuple of (doc_files list, blob_shas dict mapping path to git blob SHA)
+    """
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "jdocmunch-mcp",
+    }
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    doc_extensions = (".md", ".markdown", ".mdx", ".rst")
+
     url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/HEAD?recursive=1"
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
         if response.status_code == 404:
-            return []
+            return [], {}
         response.raise_for_status()
         data = response.json()
 
     doc_files: list[str] = []
+    blob_shas: dict[str, str] = {}
     for item in data.get("tree", []):
         if item["type"] == "blob" and item["path"].lower().endswith(doc_extensions):
-            doc_files.append(item["path"])
+            path = item["path"]
+
+            # P1-2: Skip sensitive files
+            if is_sensitive_filename(path):
+                logger.info("Skipping sensitive file: %s", path)
+                continue
+
+            doc_files.append(path)
+            blob_shas[path] = item.get("sha", "")
 
     doc_files.sort()
-    return doc_files
+    return doc_files, blob_shas
 
 
 async def index_repo(
@@ -104,14 +147,22 @@ async def index_repo(
     Returns:
         Dict with indexing statistics
     """
+    # P1-6: Block remote indexing in local-only mode
+    local_only = os.environ.get('JDOCMUNCH_LOCAL_ONLY', '').lower() in ('true', '1', 'yes')
+    if local_only:
+        return {
+            "success": False,
+            "error": "Remote indexing disabled in local-only mode. Set JDOCMUNCH_LOCAL_ONLY=false or unset to enable.",
+        }
+
     # Parse URL
     owner, repo = parse_github_url(url)
 
     # Get token from env if not provided
     token = github_token or os.environ.get("GITHUB_TOKEN")
 
-    # Discover documentation files
-    doc_files = await discover_doc_files(owner, repo, token)
+    # Discover documentation files (now also returns blob SHAs)
+    doc_files, blob_shas = await discover_doc_files(owner, repo, token)
 
     if not doc_files:
         return {
@@ -120,18 +171,45 @@ async def index_repo(
             "repo": f"{owner}/{repo}",
         }
 
+    # P1-4: Fetch commit SHA
+    commit_hash = await _fetch_commit_sha(owner, repo, token)
+
     # Fetch and parse all files
     all_sections: list[Section] = []
     raw_files: dict[str, str] = {}
+    file_hashes: dict[str, str] = {}
+    skipped_secrets: list[str] = []
 
     for file_path in doc_files:
         try:
             content = await fetch_file_content(owner, repo, file_path, token)
+
+            # P1-2: Scan content for secrets
+            detected = scan_content_for_secrets(content, file_path)
+            if detected:
+                logger.warning("Secret detected in %s: %s — skipping file", file_path, ', '.join(detected))
+                skipped_secrets.append(file_path)
+                continue
+
             raw_files[file_path] = content
-            sections = parse_markdown_to_sections(content, file_path)
+
+            # Use blob SHA from git tree as file hash (more efficient than re-hashing)
+            file_hashes[file_path] = blob_shas.get(file_path, hashlib.sha256(content.encode()).hexdigest())
+
+            # Dispatch to correct parser by extension
+            from pathlib import Path as _Path
+            ext = _Path(file_path).suffix.lower()
+            if ext == '.rst':
+                from ..parser.rst import parse_rst_to_sections
+                sections = parse_rst_to_sections(content, file_path)
+            elif ext == '.mdx':
+                from ..parser.markdown import preprocess_mdx
+                processed = preprocess_mdx(content)
+                sections = parse_markdown_to_sections(processed, file_path)
+            else:
+                sections = parse_markdown_to_sections(content, file_path)
             all_sections.extend(sections)
-        except Exception as e:
-            # Skip files that fail to fetch
+        except Exception:
             continue
 
     if not all_sections:
@@ -147,20 +225,27 @@ async def index_repo(
             summarizer = BatchSummarizer()
             all_sections = summarizer.summarize_batch(all_sections)
         except Exception:
-            # Fallback to simple summaries
             all_sections = summarize_sections_simple(all_sections)
     else:
         all_sections = summarize_sections_simple(all_sections)
 
     # Save index
     store = IndexStore(storage_path)
-    index = store.save_index(owner, repo, doc_files, all_sections, raw_files)
+    index = store.save_index(
+        owner, repo, doc_files, all_sections, raw_files,
+        commit_hash=commit_hash,
+        file_hashes=file_hashes,
+    )
 
-    return {
+    result = {
         "success": True,
         "repo": f"{owner}/{repo}",
         "indexed_at": index.indexed_at,
         "file_count": len(doc_files),
         "section_count": len(all_sections),
         "files": doc_files,
+        "commit_hash": commit_hash,
     }
+    if skipped_secrets:
+        result["skipped_secrets"] = skipped_secrets
+    return result
