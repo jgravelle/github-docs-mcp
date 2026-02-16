@@ -2,9 +2,15 @@
 # jDocMunch MCP
 ## Precision Documentation Intelligence for AI Agents
 
+![License](https://img.shields.io/badge/license-MIT-blue)
+![MCP](https://img.shields.io/badge/MCP-compatible-purple)
+![Local-first](https://img.shields.io/badge/local--first-yes-brightgreen)
+
 **Stop loading entire documentation sets. Start retrieving exactly what you need.**
 
 jDocMunch MCP transforms large documentation repositories into a structured, queryable intelligence layer for AI agents. Instead of fetching hundreds of files per query, agents retrieve only the relevant documentation sections — dramatically reducing token cost, latency, and API calls.
+
+> **Part of the Munch Trio** — see [The Munch Trio](#the-munch-trio) below for the full ecosystem including code indexing and unified orchestration.
 
 ---
 
@@ -97,18 +103,61 @@ As query volume increases, cost savings approach **two orders of magnitude**.
 
 ---
 
-## Quickstart
+## Installation
+
+### Prerequisites
+
+- **Python 3.10+**
+- **pip** (or any Python package manager)
+
+### Install
 
 ```bash
-# Clone and install
-git clone https://github.com/jgravelle/jdocmunch-mcp
-cd jdocmunch-mcp
-pip install -e .
-
-# Configure your MCP client to use the server:
-# Command: jdocmunch-mcp
-# Or: python -m jdocmunch_mcp.server
+pip install git+https://github.com/jgravelle/jdocmunch-mcp.git
 ```
+
+Verify:
+
+```bash
+jdocmunch-mcp --help 2>&1 | head -1   # should not error
+```
+
+### Configure MCP Client
+
+#### Claude Code / Claude Desktop (claude_desktop_config.json)
+
+**macOS/Linux** — `~/.config/claude/claude_desktop_config.json`
+**Windows** — `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "jdocmunch": {
+      "command": "jdocmunch-mcp",
+      "env": {
+        "GITHUB_TOKEN": "ghp_...",
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    }
+  }
+}
+```
+
+Both env vars are optional:
+- **GITHUB_TOKEN** — enables private repos + higher GitHub API rate limits
+- **ANTHROPIC_API_KEY** — enables AI-generated section summaries (falls back to keyword extraction without it)
+
+#### Other MCP clients
+
+Any MCP client that supports stdio transport can use jdocmunch-mcp. Point it at the `jdocmunch-mcp` command with the environment variables above.
+
+### Verify
+
+Once configured, ask your MCP client to list tools. You should see 8 tools.
+
+---
+
+## Quickstart
 
 ### Example Session
 
@@ -126,11 +175,38 @@ pip install -e .
    -> Returns exact section content (~500 tokens)
 ```
 
+### Tool Reference
+
+```
+index_repo:        { "url": "owner/repo" }
+index_local:       { "path": "/path/to/docs" }
+
+get_toc:           { "repo": "owner/repo" }
+get_toc_tree:      { "repo": "owner/repo" }
+search_sections:   { "repo": "owner/repo", "query": "authentication" }
+get_section:       { "repo": "owner/repo", "section_id": "readme-md--installation" }
+get_sections:      { "repo": "owner/repo", "section_ids": ["readme-md--installation", "docs/api-md--endpoints"] }
+```
+
+---
+
+## Tools (8)
+
+| Tool | Purpose |
+|------|---------|
+| `index_repo` | Index a GitHub repository's documentation |
+| `index_local` | Index a local directory's documentation |
+| `list_repos` | List all indexed repositories |
+| `get_toc` | Get table of contents with section summaries |
+| `get_toc_tree` | Get table of contents as nested tree structure |
+| `get_section` | Get full content of a specific section |
+| `get_sections` | Batch retrieve multiple sections |
+| `search_sections` | Search sections by title, keywords, and summaries |
+
 ---
 
 ## Features
 
-- **10 MCP tools** for comprehensive documentation navigation
 - **Multi-format support**: Markdown (.md), MDX (.mdx), reStructuredText (.rst)
 - **Security hardened**: symlink protection, secret detection, .gitignore respect
 - **Incremental reindexing**: only re-parses changed files
@@ -150,16 +226,6 @@ pip install -e .
 
 ---
 
-## Documentation
-
-- [USER_GUIDE.md](USER_GUIDE.md) — Comprehensive usage guide
-- [SECURITY.md](SECURITY.md) — Threat model, secret handling, access controls
-- [CACHE_SPEC.md](CACHE_SPEC.md) — Cache schema, versioning, invalidation
-- [TOKEN_COMPARISON.md](TOKEN_COMPARISON.md) — Detailed token usage analysis
-- [TOKEN_SAVINGS_COMPARISON.md](TOKEN_SAVINGS_COMPARISON.md) — Cost impact analysis
-
----
-
 ## How It Works
 
 1. Index documentation once (supports GitHub repos and local directories)
@@ -169,6 +235,49 @@ pip install -e .
 5. Retrieve only the relevant documentation fragments
 
 After indexing, queries typically consume **~500 tokens instead of hundreds of thousands**.
+
+---
+
+## Environment Variables
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `GITHUB_TOKEN` | GitHub API auth (higher rate limits, private repos) | No |
+| `ANTHROPIC_API_KEY` | AI-powered section summarization | No |
+| `JDOCMUNCH_LOCAL_ONLY` | Disable GitHub fetching for air-gapped environments | No |
+
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| Rate limits on GitHub API | No token configured | Set `GITHUB_TOKEN` for higher limits |
+| Summaries are generic keywords only | No API key configured | Set `ANTHROPIC_API_KEY` for AI summaries |
+| `jdocmunch-mcp` command not found | Package not installed or not on PATH | Re-run `pip install` and check `which jdocmunch-mcp` |
+| Index seems stale | Documentation changed since indexing | Re-run `index_repo` or `index_local` |
+
+---
+
+## The Munch Trio
+
+jDocMunch is part of a three-package ecosystem for giving AI agents structured access to both code and documentation:
+
+| Package | Purpose | Repo |
+|---------|---------|------|
+| [jcodemunch-mcp](https://github.com/jgravelle/jcodemunch-mcp) | Token-efficient code symbol indexing via tree-sitter AST parsing | 11 tools |
+| **jdocmunch-mcp** (this repo) | Token-efficient documentation section indexing | 8 tools |
+| [jcontextmunch-mcp](https://github.com/jgravelle/jcontextmunch-mcp) | Unified orchestration — hybrid search, context assembly, cross-references | 9 tools |
+
+**Using all three?** You only need to configure [jcontextmunch-mcp](https://github.com/jgravelle/jcontextmunch-mcp) in your MCP client — it spawns jcodemunch-mcp and jdocmunch-mcp as subprocesses automatically. See the [jcontextmunch-mcp installation guide](https://github.com/jgravelle/jcontextmunch-mcp#full-installation-guide) for details.
+
+---
+
+## Documentation
+
+- [USER_GUIDE.md](USER_GUIDE.md) — Comprehensive usage guide
+- [SECURITY.md](SECURITY.md) — Threat model, secret handling, access controls
+- [CACHE_SPEC.md](CACHE_SPEC.md) — Cache schema, versioning, invalidation
+- [TOKEN_COMPARISON.md](TOKEN_COMPARISON.md) — Detailed token usage analysis
+- [TOKEN_SAVINGS_COMPARISON.md](TOKEN_SAVINGS_COMPARISON.md) — Cost impact analysis
 
 ---
 
