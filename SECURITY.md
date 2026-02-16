@@ -1,123 +1,160 @@
 # Security Policy
 
-## Threat Model
+## Overview
 
-jDocMunch MCP operates as a local MCP server that indexes documentation from local directories and GitHub repositories. It processes file content and optionally sends section text to external AI services for summarization.
+jDocMunch MCP operates as a local MCP server that indexes documentation from local directories and GitHub repositories. It processes documentation content locally and optionally sends section excerpts to external AI services for summarization.
+
+This document defines the system threat model, data boundaries, and the controls implemented to prevent data leakage, path escape, and credential exposure.
+
+---
+
+## Threat Model
 
 ### Trust Boundaries
 
-1. **Local filesystem** -- The server reads files from user-specified directories. It must not escape the base directory via symlinks or path traversal.
-2. **GitHub API** -- The server fetches public/private repository content. Credentials (GITHUB_TOKEN) must not leak.
-3. **AI summarization** -- Section content (not full files) is sent to Anthropic API or a local Ollama instance for one-line summaries.
-4. **MCP clients** -- Any MCP client can invoke tools. The server trusts tool arguments but validates paths.
+1. **Local filesystem**
+   Reads files from user-specified directories. Indexing must never escape the configured base path via path traversal or symlink redirection.
 
-### Data Flow
+2. **GitHub API**
+   Retrieves repository contents using optional credentials (`GITHUB_TOKEN`). Credentials must never be exposed in logs or responses.
+
+3. **AI summarization services**
+   Only section excerpts (not full repositories) may be transmitted to Anthropic APIs or a local Ollama instance for summary generation.
+
+4. **MCP clients**
+   Tool arguments are user-provided. Paths and inputs are validated before filesystem access.
+
+---
+
+## Data Flow
 
 ```
 Local Directory / GitHub API
         |
         v
-  Indexer (parse + hash)
+   Indexer (parse + hash)
         |
         v
-  Local Cache (~/.doc-index/)     --->  AI Summarizer (Anthropic / Ollama)
-        |                                      |
-        v                                      v
-  MCP Tool Responses              Section summaries stored in cache
+Local Cache (~/.doc-index/)  --->  AI Summarizer (Anthropic / Ollama)
+        |                                   |
+        v                                   v
+   MCP Tool Responses         Section summaries stored in cache
 ```
+
+---
 
 ## Filesystem Access Controls
 
 ### Path Traversal Protection
 
-All file paths are resolved to absolute paths and validated against the base directory using `Path.resolve()` and `is_relative_to()`. Any path that resolves outside the base directory is rejected.
+All file paths are resolved using `Path.resolve()` and validated against the configured base directory. Paths resolving outside the allowed directory are rejected.
 
 ### Symlink Handling
 
-- **Default**: Symlinks are **not followed** (`follow_symlinks=False`).
-- When `follow_symlinks=True`, each symlink target is validated to remain within the base directory. Symlinks that escape the base are logged and skipped.
+* **Default:** Symlinks are not followed.
+* When enabled, symlink targets are validated to ensure they remain within the base directory. Escaping links are skipped and logged.
 
 ### Directory Exclusions
 
-The following directories are always skipped: `.git`, `node_modules`, `__pycache__`, `venv`, `dist`, `build`, and others (see `SKIP_DIRS` in `index_local.py`).
+Common generated or dependency directories are automatically excluded, including:
 
-## Credential & Secret Handling
+`.git`, `node_modules`, `__pycache__`, `venv`, `dist`, `build`
+(see `SKIP_DIRS` in the indexing module for the full list).
+
+---
+
+## Credential and Secret Protection
 
 ### Sensitive File Filtering
 
-Files matching known sensitive patterns are **never indexed**:
+Files matching known sensitive patterns are excluded from indexing:
 
-- **Filenames**: `.env`, `.env.local`, `credentials.json`, `secrets.yaml`, `.npmrc`, `.pypirc`, `.netrc`
-- **Glob patterns**: `*.pem`, `*.key`, `*.p12`, `id_rsa*`, `id_ed25519*`
+* `.env`, `.env.local`
+* `credentials.json`, `secrets.yaml`
+* `.npmrc`, `.pypirc`, `.netrc`
+* `*.pem`, `*.key`, `*.p12`
+* `id_rsa*`, `id_ed25519*`
 
-### Content Scanning
+### Content Secret Scanning
 
-After reading file content, the server scans for secret patterns before indexing:
+File contents are scanned before indexing. Files containing detected credentials are skipped.
 
-| Pattern | Description |
-|---------|-------------|
-| `-----BEGIN.*PRIVATE KEY-----` | Private keys |
-| `AKIA[0-9A-Z]{16}` | AWS access keys |
-| `sk-ant-*` | Anthropic API keys |
-| `ghp_*` | GitHub personal access tokens |
-| `glpat-*` | GitLab personal access tokens |
-| `xox[boaprs]-*` | Slack tokens |
+| Pattern                        | Description        |
+| ------------------------------ | ------------------ |
+| `-----BEGIN.*PRIVATE KEY-----` | Private keys       |
+| `AKIA[0-9A-Z]{16}`             | AWS access keys    |
+| `sk-ant-*`                     | Anthropic API keys |
+| `ghp_*`                        | GitHub tokens      |
+| `glpat-*`                      | GitLab tokens      |
+| `xox[boaprs]-*`                | Slack tokens       |
 
-Files containing detected secrets are **skipped** and logged as warnings. The tool response includes a `skipped_secrets` list so the user knows which files were excluded.
+Skipped files are logged and returned in the tool response (`skipped_secrets`).
 
-### .gitignore Respect
+### `.gitignore` Enforcement
 
-Local indexing respects `.gitignore` rules at the base directory using the `pathspec` library. Users can also pass `extra_ignore_patterns` for additional exclusions.
+Local indexing respects `.gitignore` rules using the `pathspec` library. Additional ignore patterns can be provided at runtime.
+
+---
 
 ## Local-Only Mode
 
-Set `JDOCMUNCH_LOCAL_ONLY=true` to restrict the server:
+Setting `JDOCMUNCH_LOCAL_ONLY=true` enforces local operation:
 
-- `index_repo` returns an error (no GitHub API calls).
-- AI summarization skips the Anthropic API and uses simple keyword-based summaries only.
-- Ollama (local) summarization is still permitted.
+* GitHub repository indexing disabled
+* External summarization APIs disabled
+* Local Ollama summarization still permitted
 
-This mode is suitable for air-gapped environments or when no data should leave the local machine.
+This mode supports air-gapped or privacy-sensitive environments.
 
-## Data Transmitted to External Services
+---
 
-| Service | When | What is sent |
-|---------|------|-------------|
-| GitHub API | `index_repo` | Repository file listing, raw file content |
-| Anthropic API | Summarization (if enabled) | Section title + first 2000 chars of section content |
-| Ollama (local) | Summarization (if enabled) | Same as Anthropic, but to localhost |
+## External Data Transmission
 
-**No data is sent during query operations** (`get_toc`, `search_sections`, `get_section`). All queries are answered from the local cache.
+| Service        | Trigger                  | Data Sent                                  |
+| -------------- | ------------------------ | ------------------------------------------ |
+| GitHub API     | `index_repo`             | Repository file listings and file contents |
+| Anthropic API  | Summarization (optional) | Section title + first ~2000 characters     |
+| Ollama (local) | Summarization (optional) | Same content sent locally                  |
+
+No external communication occurs during query operations (`get_toc`, `search_sections`, `get_section`). All query responses are served from the local cache.
+
+---
 
 ## Cache Security
 
-- Cache is stored at `~/.doc-index/` by default (configurable via `storage_path`).
-- Cache files are plain JSON indexes and raw markdown files.
-- No encryption is applied to cached content (it mirrors the source documentation).
-- Cache includes file hashes (SHA256) and commit hashes for integrity verification.
-- See [CACHE_SPEC.md](CACHE_SPEC.md) for full schema documentation.
+* Default cache location: `~/.doc-index/` (configurable)
+* Stored data: JSON index metadata and raw documentation files
+* No encryption is applied (cache mirrors source documentation)
+* File and commit hashes provide integrity verification
+
+See `CACHE_SPEC.md` for schema details.
+
+---
 
 ## Environment Variables
 
-| Variable | Purpose | Sensitive? |
-|----------|---------|------------|
-| `GITHUB_TOKEN` | GitHub API authentication | Yes |
-| `ANTHROPIC_API_KEY` | Anthropic API authentication | Yes |
-| `OLLAMA_URL` | Ollama server URL | No |
-| `OLLAMA_MODEL` | Ollama model name | No |
-| `USE_OLLAMA` | Enable Ollama summarization | No |
-| `JDOCMUNCH_LOCAL_ONLY` | Restrict to local-only operation | No |
+| Variable               | Purpose                      | Sensitive |
+| ---------------------- | ---------------------------- | --------- |
+| `GITHUB_TOKEN`         | GitHub API authentication    | Yes       |
+| `ANTHROPIC_API_KEY`    | Anthropic API authentication | Yes       |
+| `OLLAMA_URL`           | Local Ollama server URL      | No        |
+| `OLLAMA_MODEL`         | Ollama model name            | No        |
+| `USE_OLLAMA`           | Enable Ollama summarization  | No        |
+| `JDOCMUNCH_LOCAL_ONLY` | Enforce local-only operation | No        |
+
+---
 
 ## Vulnerability Reporting
 
-If you discover a security vulnerability, please report it by opening a private issue at:
+Security vulnerabilities may be reported privately by opening an issue at:
 
-https://github.com/jgravelle/jdocmunch-mcp/issues
+[https://github.com/jgravelle/jdocmunch-mcp/issues](https://github.com/jgravelle/jdocmunch-mcp/issues)
 
-Please include:
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Suggested fix (if any)
+Include:
 
-We aim to acknowledge reports within 48 hours.
+* Description of the issue
+* Steps to reproduce
+* Potential impact
+* Suggested remediation (if available)
+
+Reports are typically acknowledged within 48 hours.
