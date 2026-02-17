@@ -343,7 +343,7 @@ async def index_local(
     if use_ai_summaries and not local_only:
         try:
             summarizer = BatchSummarizer()
-            all_sections = summarizer.summarize_batch(all_sections)
+            all_sections = await summarizer.summarize_batch(all_sections)
         except Exception:
             all_sections = summarize_sections_simple(all_sections)
     else:

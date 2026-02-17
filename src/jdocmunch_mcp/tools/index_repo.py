@@ -223,7 +223,7 @@ async def index_repo(
     if use_ai_summaries:
         try:
             summarizer = BatchSummarizer()
-            all_sections = summarizer.summarize_batch(all_sections)
+            all_sections = await summarizer.summarize_batch(all_sections)
         except Exception:
             all_sections = summarize_sections_simple(all_sections)
     else:
